@@ -3,19 +3,20 @@ package com.ucb.ucbtest.book
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -29,15 +30,26 @@ fun BookUI(viewModel: BookViewModel = hiltViewModel()) {
     var searchQuery by remember { mutableStateOf("") }
     val bookState by viewModel.state.collectAsState()
     val focusManager = LocalFocusManager.current
+    var showFavoritesOnly by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Búsqueda de Libros", fontWeight = FontWeight.Bold)
+                title = { Text("Búsqueda de Libros") },
+                actions = {
+                    // Botón para mostrar solo favoritos
+                    IconButton(onClick = {
+                        showFavoritesOnly = !showFavoritesOnly
+                        if (showFavoritesOnly) {
+                            viewModel.loadFavorites()
+                        } else if (searchQuery.isNotBlank()) {
+                            viewModel.searchBooks(searchQuery)
+                        }
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.List,
+                            contentDescription = if (showFavoritesOnly) "Mostrar búsqueda" else "Mostrar favoritos"
+                        )
                     }
                 }
             )
@@ -49,17 +61,16 @@ fun BookUI(viewModel: BookViewModel = hiltViewModel()) {
                 .padding(padding)
                 .padding(16.dp)
         ) {
-            // Barra de búsqueda mejorada
+            // Campo de búsqueda
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
                 label = { Text("Buscar libros") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp)),
+                modifier = Modifier.fillMaxWidth(),
                 trailingIcon = {
                     IconButton(onClick = {
                         focusManager.clearFocus()
+                        showFavoritesOnly = false
                         viewModel.searchBooks(searchQuery)
                     }) {
                         Icon(Icons.Default.Search, contentDescription = "Buscar")
@@ -68,6 +79,7 @@ fun BookUI(viewModel: BookViewModel = hiltViewModel()) {
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = {
                     focusManager.clearFocus()
+                    showFavoritesOnly = false
                     viewModel.searchBooks(searchQuery)
                 }),
                 singleLine = true
@@ -75,21 +87,14 @@ fun BookUI(viewModel: BookViewModel = hiltViewModel()) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Estado de la búsqueda
             when (val state = bookState) {
                 is BookViewModel.BookState.Initial -> {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                "Ingrese un término para buscar libros",
-                                style = MaterialTheme.typography.bodyLarge
-                            )
-                        }
+                        Text("Ingrese un término para buscar libros o vea sus favoritos")
                     }
                 }
                 is BookViewModel.BookState.Loading -> {
@@ -97,21 +102,26 @@ fun BookUI(viewModel: BookViewModel = hiltViewModel()) {
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            CircularProgressIndicator()
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text("Buscando libros...")
-                        }
+                        CircularProgressIndicator()
                     }
                 }
                 is BookViewModel.BookState.Success -> {
+                    // Mostrar el título apropiado
+                    Text(
+                        text = if (showFavoritesOnly) "Mis Libros Favoritos" else "Resultados de la búsqueda",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+
                     LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(state.books) { book ->
-                            BookItem(book = book)
+                            BookItem(
+                                book = book,
+                                isFavorite = state.favoriteKeys.contains(book.key),
+                                onFavoriteClick = { viewModel.toggleFavorite(book) }
+                            )
                         }
                     }
                 }
@@ -120,20 +130,7 @@ fun BookUI(viewModel: BookViewModel = hiltViewModel()) {
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Icon(
-                                Icons.Default.Search,
-                                contentDescription = null,
-                                modifier = Modifier.size(48.dp)
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                state.message,
-                                style = MaterialTheme.typography.bodyLarge
-                            )
-                        }
+                        Text(state.message)
                     }
                 }
             }
@@ -142,83 +139,79 @@ fun BookUI(viewModel: BookViewModel = hiltViewModel()) {
 }
 
 @Composable
-fun BookItem(book: Book) {
+fun BookItem(book: Book, isFavorite: Boolean, onFavoriteClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            .padding(vertical = 4.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            // Cover image with rounded corners
+            // Cover image
             if (book.cover_i != null) {
                 AsyncImage(
                     model = "https://covers.openlibrary.org/b/id/${book.cover_i}-M.jpg",
-                    contentDescription = "Portada de ${book.title}",
+                    contentDescription = "Book cover",
                     modifier = Modifier
-                        .size(100.dp)
-                        .clip(RoundedCornerShape(8.dp)),
+                        .size(80.dp)
+                        .padding(end = 16.dp),
                     contentScale = ContentScale.Crop
                 )
             } else {
                 Box(
                     modifier = Modifier
-                        .size(100.dp)
-                        .clip(RoundedCornerShape(8.dp)),
+                        .size(80.dp)
+                        .padding(end = 16.dp),
                     contentAlignment = Alignment.Center
                 ) {
+                    Text("No Image")
                 }
             }
 
-            Spacer(modifier = Modifier.width(16.dp))
-
-            // Book details with improved typography
+            // Book details
             Column(
                 modifier = Modifier.weight(1f)
             ) {
                 Text(
                     text = book.title,
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
                 if (book.author_name.isNotEmpty()) {
                     Text(
-                        text = "Por: ${book.author_name.joinToString(", ")}",
+                        text = book.author_name.joinToString(", "),
                         style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 2,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    book.first_publish_year?.let {
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier.padding(end = 8.dp)
-                        ) {
-                            Text(
-                                text = " Año: $it ",
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
+                book.first_publish_year?.let {
+                    Text(
+                        text = "Año: $it",
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
+            }
+
+            // Botón de favorito
+            IconButton(
+                onClick = onFavoriteClick
+            ) {
+                Icon(
+                    imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                    contentDescription = if (isFavorite) "Eliminar de favoritos" else "Añadir a favoritos",
+                    tint = if (isFavorite) Color.Red else Color.Gray
+                )
             }
         }
     }
