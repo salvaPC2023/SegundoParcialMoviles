@@ -1,8 +1,9 @@
 package com.ucb.ucbtest.book
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -18,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -113,11 +115,14 @@ fun BookUI(viewModel: BookViewModel = hiltViewModel()) {
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
 
-                    LazyColumn(
+                    // Usar LazyVerticalGrid en lugar de LazyColumn para mostrar 3 elementos por fila
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(3),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(state.books) { book ->
-                            BookItem(
+                            BookGridItem(
                                 book = book,
                                 isFavorite = state.favoriteKeys.contains(book.key),
                                 onFavoriteClick = { viewModel.toggleFavorite(book) }
@@ -138,6 +143,90 @@ fun BookUI(viewModel: BookViewModel = hiltViewModel()) {
     }
 }
 
+@Composable
+fun BookGridItem(book: Book, isFavorite: Boolean, onFavoriteClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 280.dp) // Hacemos la tarjeta más alta
+            .padding(2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Imagen más alta
+            Box(
+                modifier = Modifier
+                    .height(140.dp) // Aumentado
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (book.cover_i != null) {
+                    AsyncImage(
+                        model = "https://covers.openlibrary.org/b/id/${book.cover_i}-M.jpg",
+                        contentDescription = "Book cover",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Text(
+                        text = "No Image",
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+
+            // Título
+            Text(
+                text = book.title,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+
+            // Autor
+            if (book.author_name.isNotEmpty()) {
+                Text(
+                    text = book.author_name.first(),
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            // Año de publicación
+            book.first_publish_year?.let {
+                Text(
+                    text = "Año: $it",
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Botón favorito
+            IconButton(
+                onClick = onFavoriteClick,
+                modifier = Modifier.size(24.dp)
+            ) {
+                Icon(
+                    imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                    contentDescription = if (isFavorite) "Eliminar de favoritos" else "Añadir a favoritos",
+                    tint = if (isFavorite) Color.Red else Color.Gray
+                )
+            }
+        }
+    }
+}
+
+// Mantener el diseño anterior por si es necesario
 @Composable
 fun BookItem(book: Book, isFavorite: Boolean, onFavoriteClick: () -> Unit) {
     Card(
